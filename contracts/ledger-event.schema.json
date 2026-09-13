@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ledger movement event v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "accountId",
+    "ownerId",
+    "amount",
+    "balance",
+    "sequence",
+    "occurredAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "accountId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ownerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "amount": {
+      "type": "number",
+      "multipleOf": 0.01
+    },
+    "balance": {
+      "type": "number",
+      "minimum": 0,
+      "multipleOf": 0.01
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

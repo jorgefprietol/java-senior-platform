@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {parseAmount,sumAmounts,formatMoney,positiveAmount} from '../src/money.mjs';
+test('normalizes decimal without floating point arithmetic',()=>assert.equal(parseAmount('120.1'),'120.10'));
+test('accepts a withdrawal',()=>assert.equal(parseAmount('-0.01'),'-0.01'));
+for(const invalid of ['0','0.00','1.001','1e3','NaN',' 1','01','<script>']) test('rejects '+invalid,()=>assert.throws(()=>parseAmount(invalid)));
+test('preserves cents above the safe integer range',()=>assert.equal(formatMoney('99999999999999.99','USD'),'$99,999,999,999,999.99'));
+test('sums loaded balances exactly',()=>assert.equal(sumAmounts(['99999999999999.99','0.01']),'100000000000000.00'));
+test('handles signed cents and empty totals',()=>{assert.equal(sumAmounts(['0.10','0.20','-0.01']),'0.29');assert.equal(sumAmounts([]),'0.00');assert.equal(positiveAmount('-0.01'),false);assert.equal(formatMoney('-0.01','EUR'),'-€0.01');});
+test('accepts the same maximum precision as the API',()=>assert.equal(parseAmount('99999999999999.99'),'99999999999999.99'));

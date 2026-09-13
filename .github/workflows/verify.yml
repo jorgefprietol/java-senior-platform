@@ -1,0 +1,47 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: sh scripts/bootstrap.sh
+      - run: docker compose up --build -d
+      - run: python3 scripts/verify.py --resilience
+      - run: npm ci && npm test && npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+      - run: npm audit --audit-level=high
+        working-directory: frontend
+      - name: Scan application images
+        run: |
+          mkdir -p artifacts
+          for image in java-senior-ledger java-senior-audit java-senior-web; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/artifacts:/reports" -v trivy-cache:/root/.cache aquasec/trivy:0.74.0 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output "/reports/$image.json" "$image:latest"
+          done
+      - name: Docker diagnostics
+        if: failure()
+        run: docker compose logs --tail 100 ledger audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification
+          path: |
+            artifacts/*.json
+            frontend/test-results
+          retention-days: 7
+      - if: always()
+        run: docker compose down -v

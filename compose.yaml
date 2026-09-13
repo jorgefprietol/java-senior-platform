@@ -1,0 +1,96 @@
+name: java-senior
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 512m
+  healthcheck:
+    test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/actuator/health/readiness']
+    interval: 10s
+    timeout: 5s
+    retries: 20
+    start_period: 40s
+  environment: &app-env
+    DB_USER: app
+    DB_PASSWORD: ${DB_PASSWORD:?Run scripts/bootstrap.ps1 first}
+    RABBIT_USER: app
+    RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Run bootstrap}
+    OIDC_ISSUER: http://localhost:8180/realms/portfolio
+    OIDC_JWKS: http://identity:8080/realms/portfolio/protocol/openid-connect/certs
+  depends_on:
+    ledger-db: {condition: service_healthy}
+    audit-db: {condition: service_healthy}
+    rabbit: {condition: service_healthy}
+services:
+  ledger-db:
+    image: postgres:18.3-alpine
+    environment: {POSTGRES_DB: ledger, POSTGRES_USER: app, POSTGRES_PASSWORD: '${DB_PASSWORD:?Run bootstrap}'}
+    volumes: [ledger-data:/var/lib/postgresql]
+    healthcheck: {test: ['CMD-SHELL', 'pg_isready -U app -d ledger'], interval: 5s, timeout: 3s, retries: 20}
+    mem_limit: 256m
+  audit-db:
+    image: postgres:18.3-alpine
+    environment: {POSTGRES_DB: audit, POSTGRES_USER: app, POSTGRES_PASSWORD: '${DB_PASSWORD:?Run bootstrap}'}
+    volumes: [audit-data:/var/lib/postgresql]
+    healthcheck: {test: ['CMD-SHELL', 'pg_isready -U app -d audit'], interval: 5s, timeout: 3s, retries: 20}
+    mem_limit: 256m
+  identity-db:
+    image: postgres:18.3-alpine
+    environment: {POSTGRES_DB: identity, POSTGRES_USER: identity, POSTGRES_PASSWORD: '${IDENTITY_DB_PASSWORD:?Run bootstrap}'}
+    volumes: [identity-data:/var/lib/postgresql]
+    healthcheck: {test: ['CMD-SHELL', 'pg_isready -U identity -d identity'], interval: 5s, timeout: 3s, retries: 20}
+    mem_limit: 256m
+  identity:
+    image: quay.io/keycloak/keycloak:26.7.3
+    command: ['start-dev','--import-realm']
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://identity-db:5432/identity
+      KC_DB_USERNAME: identity
+      KC_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run bootstrap}
+      KC_HOSTNAME: http://localhost:8180
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run bootstrap}
+      KC_HEALTH_ENABLED: 'true'
+      JAVA_OPTS_KC_HEAP: '-Xms128m -Xmx384m'
+    ports: ['127.0.0.1:8180:8080']
+    volumes: [./.local/realm.json:/opt/keycloak/data/import/realm.json:ro]
+    depends_on: {identity-db: {condition: service_healthy}}
+    mem_limit: 768m
+  rabbit:
+    image: rabbitmq:4.2.4-management-alpine
+    environment: {RABBITMQ_DEFAULT_USER: app, RABBITMQ_DEFAULT_PASS: '${RABBIT_PASSWORD:?Run bootstrap}'}
+    volumes: [rabbit-data:/var/lib/rabbitmq]
+    healthcheck: {test: ['CMD','rabbitmq-diagnostics','-q','ping'], interval: 10s, timeout: 5s, retries: 20}
+    mem_limit: 384m
+  ledger:
+    <<: *app
+    build: {context: ., args: {SERVICE: ledger-service}}
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://ledger-db:5432/ledger
+  audit:
+    <<: *app
+    build: {context: ., args: {SERVICE: audit-service}}
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://audit-db:5432/audit
+  web:
+    build: ./frontend
+    ports: ['127.0.0.1:8181:8080']
+    depends_on:
+      ledger: {condition: service_healthy}
+      audit: {condition: service_healthy}
+      identity: {condition: service_started}
+    read_only: true
+    tmpfs: [/tmp,/var/cache/nginx,/var/run]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+volumes:
+  ledger-data:
+  audit-data:
+  identity-data:
+  rabbit-data:

@@ -1,0 +1,42 @@
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+ <aside class="sidebar">
+  <a class="brand" href="/" aria-label="Northstar Treasury home"><span class="mark" aria-hidden="true">N</span> NORTHSTAR<span class="subbrand">TREASURY WORKSPACE</span></a>
+  <div class="nav-label">WORKSPACE</div>
+  <nav aria-label="Main navigation">
+   <button [class.active]="section()==='accounts'" [attr.aria-current]="section()==='accounts'?'page':null" (click)="section.set('accounts')"><span aria-hidden="true">â–¦</span> Accounts</button>
+   <button [disabled]="!signedIn()" [class.active]="section()==='audit'" [attr.aria-current]="section()==='audit'?'page':null" (click)="showAudit()"><span aria-hidden="true">â‰¡</span> Audit trail</button>
+  </nav>
+  <div class="side-foot"><span class="status-dot"></span> Local workspace<p>Only your accounts are visible.</p></div>
+ </aside>
+ <div class="workspace">
+  <header class="topbar"><span>Operations <span class="slash">/</span> {{section()==='accounts'?'Accounts':'Audit trail'}}</span><div class="user"><span class="badge">LOCAL</span>@if(signedIn()){<button class="quiet" (click)="logout()">Sign out</button>}</div></header>
+  <main id="main" tabindex="-1">
+   <div class="page-heading"><div><p class="eyebrow">NORTHSTAR / OPERATIONS</p><h1>{{section()==='accounts'?'Your money, in focus.':'Every movement, accounted for.'}}</h1><p class="muted">{{section()==='accounts'?'Manage balances and record account activity.':'An independent, read-only record of your transactions.'}}</p></div>@if(signedIn()){<button class="secondary" [disabled]="busy()" (click)="refresh()">Refresh data</button>}</div>
+   @if(error()){<div class="alert error" role="alert">{{error()}}</div>}
+   @if(notice()){<div class="alert success" role="status">{{notice()}}</div>}
+   @if(!ready()){<div class="empty" role="status">Connecting to your workspaceâ€¦</div>}
+   @else if(!signedIn()){
+    <section class="welcome"><p class="eyebrow">A CLEAR VIEW OF YOUR ACCOUNTS</p><h2>One workspace.<br>Every balance.</h2><p>Sign in to open accounts, record deposits and withdrawals,<br class="desktop"> and follow every transaction through the audit trail.</p><button class="primary" (click)="login()">Sign in securely <span aria-hidden="true">â†’</span></button><small>Use the demo identity configured during local setup.</small></section>
+   }@else if(section()==='accounts'){
+    <section class="metrics" aria-label="Account summary"><div class="metric"><p>USD balance Â· loaded accounts</p><strong>{{money(totalUsd(),'USD')}}</strong><span>Current available funds</span></div><div class="metric"><p>Accounts in view</p><strong>{{accounts().length}}</strong><span>Up to 25 accounts per page</span></div><div class="metric accent"><p>Workspace controls</p><strong class="small-value">Protected access</strong><span>Individual ownership Â· immutable movements</span></div></section>
+    <div class="columns">
+     <section class="panel"><div class="panel-title"><h2>Accounts</h2><span class="count">{{accounts().length}}</span></div>
+      @if(!accounts().length){<div class="empty"><h3>A fresh start</h3><p>Create your first account below.</p></div>}
+      <ul class="account-list">@for(account of accounts();track account.id){<li><button class="account" [class.selected]="selected()?.id===account.id" [attr.aria-pressed]="selected()?.id===account.id" (click)="choose(account)" [disabled]="busy()"><span class="account-icon" aria-hidden="true">{{account.currency==='USD'?'$':'â‚¬'}}</span><span class="account-name"><strong>{{account.name}}</strong><small>{{account.currency}} Â· {{account.id.slice(0,8)}}</small></span><strong>{{money(account.balance,account.currency)}}</strong></button></li>}</ul>
+      <form (ngSubmit)="create()" class="form new-account"><h3>Open an account</h3><label for="account-name">Account name</label><input id="account-name" name="name" [(ngModel)]="name" maxlength="80" required placeholder="e.g. Operating expenses"><label for="currency">Currency</label><select id="currency" name="currency" [(ngModel)]="currency"><option>USD</option><option>EUR</option></select><button class="primary" type="submit" [disabled]="busy()">{{busy()?'Please waitâ€¦':'Create account'}}</button></form>
+     </section>
+     <section class="panel detail"><div class="panel-title"><h2>{{selected()?.name || 'Account activity'}}</h2><span class="badge">{{selected()?.currency || 'DETAILS'}}</span></div>
+      @if(selected();as account){
+       <form class="form movement-form" (ngSubmit)="post()"><h3>Record a movement</h3><p class="muted">Positive amounts deposit funds. Negative amounts withdraw them.</p><div class="form-row"><div><label for="amount">Amount ({{account.currency}})</label><input id="amount" name="amount" type="text" inputmode="decimal" [(ngModel)]="amount" required placeholder="0.00" aria-describedby="amount-help"><small id="amount-help">Up to 2 decimal places.</small></div><div><label for="description">Description</label><input id="description" name="description" [(ngModel)]="description" maxlength="140" required placeholder="e.g. Monthly allocation"></div></div><button class="primary" type="submit" [disabled]="busy()">{{busy()?'Recordingâ€¦':'Record movement'}}</button></form>
+       <div class="activity"><h3>Recent movements</h3>@if(!history().length){<p class="empty">No movements yet. Your first transaction will appear here.</p>}@else{<div class="table-scroll"><table><caption class="sr-only">Recent account movements</caption><thead><tr><th>Description / date</th><th class="number">Amount</th><th class="number">Balance after</th></tr></thead><tbody>@for(m of history();track m.id){<tr><td><strong>{{m.description}}</strong><small>{{m.occurredAt | date:'medium'}}</small></td><td class="number" [class.positive]="positive(m.amount)">{{positive(m.amount)?'+':''}}{{money(m.amount)}}</td><td class="number">{{money(m.balance,account.currency)}}</td></tr>}</tbody></table></div>}</div>
+      }@else{<div class="empty large"><div class="empty-symbol" aria-hidden="true">â†—</div><h3>Select an account</h3><p>View its balance and record a movement.</p></div>}
+     </section>
+    </div>
+   }@else{
+    <section class="panel"><div class="panel-title"><h2>Transaction events</h2><span class="badge">READ ONLY</span></div><p class="panel-note">Events arrive asynchronously. Refresh after recording a movement. Showing the latest 100 events.</p>@if(!audit().length){<div class="empty"><h3>No events yet</h3><p>Record a movement and refresh in a few seconds.</p></div>}@else{<div class="table-scroll"><table><caption class="sr-only">Your transaction audit events</caption><thead><tr><th>Account</th><th>Recorded</th><th class="number">Sequence</th><th class="number">Amount</th><th class="number">Balance after</th></tr></thead><tbody>@for(e of audit();track e.event_id){<tr><td>{{e.account_id.slice(0,8)}}</td><td>{{e.occurred_at | date:'medium'}}</td><td class="number">{{e.sequence}}</td><td class="number">{{money(e.amount)}}</td><td class="number">{{money(e.balance)}}</td></tr>}</tbody></table></div>}</section>
+   }
+   <footer>Northstar Treasury <span>Account operations & transaction audit</span></footer>
+  </main>
+ </div>
+</div>
