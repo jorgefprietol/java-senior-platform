@@ -45,13 +45,20 @@ def eventually(predicate, timeout=40):
         time.sleep(1)
     return False
 
+last_readiness_error='No response'
 for attempt in range(90):
     try:
         alice=token('alice');bob=token('bob')
-        if request('/api/accounts',alice)[0]==200: break
-    except (OSError,ValueError): pass
+        status,_=request('/api/accounts',alice)
+        if status==200: break
+        last_readiness_error='Account API HTTP '+str(status)
+    except urllib.error.HTTPError as error:
+        last_readiness_error='Identity endpoint HTTP '+str(error.code)
+    except (OSError,ValueError) as error:
+        last_readiness_error=type(error).__name__
+    if attempt in (0,15,45): print('Waiting for readiness:',last_readiness_error,flush=True)
     time.sleep(2)
-else: raise RuntimeError('Services did not become ready within 180 seconds')
+else: raise RuntimeError('Services did not become ready: '+last_readiness_error)
 
 check('anonymous access rejected',request('/api/accounts')[0]==401)
 check('forged bearer rejected',request('/api/accounts','forged.jwt.signature')[0]==401)

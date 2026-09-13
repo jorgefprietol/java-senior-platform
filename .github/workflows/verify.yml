@@ -34,7 +34,9 @@ jobs:
           done
       - name: Docker diagnostics
         if: failure()
-        run: docker compose logs --tail 100 ledger audit
+        run: |
+          docker compose ps -a
+          docker compose logs --tail 100 ledger audit identity web
       - uses: actions/upload-artifact@v4
         if: always()
         with:
